@@ -1,0 +1,6 @@
+# Recurring jobs. sidekiq-cron loads this file when the Sidekiq server starts
+# (restart the sidekiq container after editing it).
+programme_sync:
+  cron: "0 * * * *"
+  class: "ProgrammeSyncJob"
+  description: "Sync the festival programme from the festival API"
