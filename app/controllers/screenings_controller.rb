@@ -4,7 +4,7 @@ class ScreeningsController < ApplicationController
 
     @screenings = Screening.includes(:film, :venue).order(:starts_at)
     @screenings = @screenings.where(venue_id: params[:venue_id]) if params[:venue_id].present?
-    query = params[:q].to_s.strip
+    query = params[:q].to_s.delete("\0").strip # Postgres rejects NUL bytes in text
     @screenings = @screenings.title_matching(query) if query.present?
 
     if params[:date].present?
