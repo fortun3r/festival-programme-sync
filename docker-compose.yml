@@ -3,6 +3,9 @@ name: festival
 x-app: &app
   build: .
   image: festival-app:dev
+  # The bundle volume below outlives image rebuilds, so it won't have gems
+  # added to the Gemfile since it was created; install them before starting.
+  entrypoint: ["sh", "-c", 'bundle check >/dev/null || bundle install && exec "$$@"', "--"]
   volumes:
     - .:/rails                 # live-mount the source so host edits reflect instantly
     - bundle:/usr/local/bundle # keep installed gems in a named volume, not the bind mount
