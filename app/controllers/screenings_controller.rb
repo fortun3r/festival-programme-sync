@@ -4,7 +4,8 @@ class ScreeningsController < ApplicationController
 
     @screenings = Screening.includes(:film, :venue).order(:starts_at)
     @screenings = @screenings.where(venue_id: params[:venue_id]) if params[:venue_id].present?
-    @screenings = @screenings.title_matching(params[:q].strip) if params[:q].present?
+    query = params[:q].to_s.strip
+    @screenings = @screenings.title_matching(query) if query.present?
 
     if params[:date].present?
       date = begin
