@@ -13,7 +13,7 @@
 - Screenings missing upstream are reported, not deleted: absence from one paged snapshot is weak evidence.
 - Filters reload only the results frame, with a debounced Stimulus submit. One region, so no Turbo Stream.
 
-**Existing code.** `VenueSync` matched venues on name, so an upstream rename fails the unique external-id check and aborts the batch, and a new venue reusing a name takes over the old row. I fixed the lookup, with regression specs. Nothing here calls it; I assume the nightly script does, so it should be deleted along with that script. Also fixed: the index N+1, ignored `q` and untargeted frame, plus setup issues (dev host check blocked the worker, non-executable `bin/`, seeds in the test DB, a stale gem volume). Left alone: `/sidekiq` has no auth; the mock API is routed in production.
+**Existing code.** `VenueSync` matched venues on name, so an upstream rename fails the unique external-id check and aborts the batch, and a new venue reusing a name takes over the old row. I fixed the lookup, with regression specs. Nothing here calls it; I assume the nightly script does, so it should be deleted along with that script. Also fixed: the index N+1, ignored `q` and untargeted frame, plus setup issues (dev host check blocked the worker, non-executable `bin/`, seeds in the test DB, a stale gem volume, parallel image builds failing on a clean machine). Left alone: `/sidekiq` has no auth; the mock API is routed in production.
 
 **Assumptions.** Times are UTC; each sync pulls the full programme.
 

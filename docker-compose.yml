@@ -1,8 +1,11 @@
 name: festival
 
 x-app: &app
-  build: .
   image: festival-app:dev
+  # Only web builds the image (see below) and css/sidekiq reuse it: building it
+  # once per service in parallel fails on a fresh machine with "image already
+  # exists". It's never pulled from a registry.
+  pull_policy: never
   # The bundle volume below outlives image rebuilds, so it won't have gems
   # added to the Gemfile since it was created; install them before starting.
   entrypoint: ["sh", "-c", 'bundle check >/dev/null || bundle install && exec "$$@"', "--"]
@@ -52,6 +55,7 @@ services:
 
   web:
     <<: *app
+    build: .
     command: sh -c "rm -f tmp/pids/server.pid && bin/rails db:prepare && bin/rails tailwindcss:build && bin/rails server -b 0.0.0.0 -p 3000"
     ports:
       - "3000:3000"
