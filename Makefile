@@ -1,4 +1,4 @@
-.PHONY: up build down console sh test logs reset psql
+.PHONY: up build down console sh test sync logs reset psql
 
 # Start everything (Postgres, Redis, web, css watcher, sidekiq).
 up:
@@ -28,6 +28,11 @@ sh:
 # Run the RSpec suite against a freshly prepared test database.
 test:
 	docker compose run --rm -e RAILS_ENV=test web sh -c "bin/rails db:prepare && bundle exec rspec"
+
+# Run the programme sync now and print what it did. Pass the API's query params
+# quoted, e.g. make sync Q='generation=2&fail_after=8'
+sync:
+	docker compose exec web bin/rails "programme:sync[$(Q)]"
 
 # Follow the web + sidekiq logs.
 logs:
