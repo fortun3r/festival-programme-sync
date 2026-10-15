@@ -14,6 +14,9 @@ x-app: &app
     DATABASE_PASSWORD: postgres
     REDIS_URL: redis://redis:6379/0
     FESTIVAL_API_URL: http://web:3000
+    # Rails' development host check only allows localhost-style hosts; the sync
+    # calls the mock API as "web", so allow it or every request gets a 403.
+    RAILS_DEVELOPMENT_HOSTS: web
   depends_on:
     db:
       condition: service_healthy
