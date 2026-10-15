@@ -154,4 +154,53 @@ RSpec.describe ProgrammeSync do
     expect(run.request_params).to eq("generation" => "2")
     expect(Screening.count).to eq(61)
   end
+
+  describe "overlapping runs" do
+    # Transactional specs share one connection across threads, so another
+    # process holding the lock needs a connection of its own.
+    def other_session
+      config = ActiveRecord::Base.connection_db_config.configuration_hash
+      PG.connect(host: config[:host], port: config[:port], user: config[:username],
+                 password: config[:password], dbname: config[:database])
+    end
+
+    def try_lock(session)
+      session.exec("SELECT pg_try_advisory_lock(#{ProgrammeSync::LOCK_KEY})").getvalue(0, 0) == "t"
+    end
+
+    it "skips the run while another process holds the lock" do
+      stub_festival_api
+      other = other_session
+      expect(try_lock(other)).to be(true)
+
+      run = sync
+
+      expect(run).to be_skipped
+      expect(Screening.count).to eq(0)
+      expect(a_request(:get, %r{/mock_api/screenings})).not_to have_been_made
+    ensure
+      other&.close
+    end
+
+    it "releases the lock when it finishes, including after a failure" do
+      stub_festival_api
+      sync
+      expect { sync("fail_after" => "8") }.to raise_error(FestivalApi::Error)
+
+      other = other_session
+      expect(try_lock(other)).to be(true)
+    ensure
+      other&.close
+    end
+
+    it "marks a run left running by a worker that died as failed" do
+      stub_festival_api
+      abandoned = SyncRun.create!(status: :running)
+
+      sync
+
+      expect(abandoned.reload).to be_failed
+      expect(abandoned.error).to start_with("Abandoned")
+    end
+  end
 end

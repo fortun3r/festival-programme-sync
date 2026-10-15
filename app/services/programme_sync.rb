@@ -10,6 +10,9 @@ class ProgrammeSync
   API_PARAMS = %w[ generation fail_after slow ].freeze
   # How many failed records and missing ids a SyncRun keeps.
   LISTED = 50
+  # Postgres advisory lock held while a sync runs, so only one runs at a time
+  # across every process (Sidekiq, rake, console). Any constant works.
+  LOCK_KEY = 72_017_001
 
   attr_reader :run
 
@@ -19,6 +22,30 @@ class ProgrammeSync
   end
 
   def call
+    ActiveRecord::Base.with_connection do |connection|
+      # A session-level lock (pg_try_advisory_lock): Postgres releases it if
+      # this process dies, and no other session can release it for us.
+      unless connection.get_advisory_lock(LOCK_KEY)
+        return @run = SyncRun.create!(status: :skipped, request_params: @params, finished_at: Time.current)
+      end
+
+      begin
+        sync
+      ensure
+        # false means our session was replaced mid-run (a reconnect), and the lock went with it.
+        Rails.logger.warn("ProgrammeSync: advisory lock was lost during the run") unless connection.release_advisory_lock(LOCK_KEY)
+      end
+    end
+  end
+
+  private
+
+  def sync
+    # Holding the lock means no other run is alive, so a run still marked
+    # running was left behind by a worker that died.
+    SyncRun.running.update_all(status: "failed", error: "Abandoned: the worker stopped before finishing",
+                               finished_at: Time.current, updated_at: Time.current)
+
     @counts = %w[ screenings films venues ].index_with { { "created" => 0, "updated" => 0, "unchanged" => 0 } }
     @counts.merge!("failed" => 0, "missing_upstream" => 0)
     @failures = []
@@ -35,8 +62,6 @@ class ProgrammeSync
     Rails.logger.error(@run.summary) if @run
     raise
   end
-
-  private
 
   # Follows the page count the API reports instead of stopping at a short
   # page: a failing API can send a short page before it errors. Returns the
