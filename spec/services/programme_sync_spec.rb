@@ -21,9 +21,12 @@ RSpec.describe ProgrammeSync do
       "failed" => 0,
       "missing_upstream" => 0
     )
+    expect(Film.find_by!(external_id: "FILM-001")).to have_attributes(MockApi::Dataset::FILMS.fetch("FILM-001"))
+    expect(Venue.find_by!(external_id: "VEN-01")).to have_attributes(MockApi::Dataset::VENUES.fetch("VEN-01"))
     expect(Screening.find_by!(external_id: "SCR-0001")).to have_attributes(
       film: Film.find_by!(external_id: "FILM-001"),
       venue: Venue.find_by!(external_id: "VEN-01"),
+      starts_at: Time.utc(2027, 3, 6, 16),
       status: "scheduled"
     )
   end
@@ -114,7 +117,6 @@ RSpec.describe ProgrammeSync do
     template = good.first
     stub_festival_page([
       good.first,
-      nil,
       template.merge("id" => "SCR-0901").except("film"),
       template.merge("id" => "SCR-0902", "film" => template["film"].merge("id" => "FILM-901", "title" => "")),
       template.merge("id" => "SCR-0903", "starts_at" => "not a date"),
@@ -124,15 +126,24 @@ RSpec.describe ProgrammeSync do
     run = sync
 
     expect(run).to be_completed_with_errors
+    expect(run.error).to be_nil
     expect(Screening.pluck(:external_id)).to contain_exactly("SCR-0001", "SCR-0002")
     expect(Film.exists?(external_id: "FILM-901")).to be(false)
     expect(run.counts["screenings"]).to eq("created" => 2, "updated" => 0, "unchanged" => 0)
-    expect(run.counts["failed"]).to eq(4)
-    expect(run.failures.pluck("external_id")).to eq([ nil, "SCR-0901", "SCR-0902", "SCR-0903" ])
+    expect(run.counts["failed"]).to eq(3)
+    expect(run.failures.pluck("external_id")).to eq([ "SCR-0901", "SCR-0902", "SCR-0903" ])
     expect(run.failures.pluck("error")).to all(be_present)
-    # The record without an id can't be accounted for, so the run can't vouch
-    # that it saw everything upstream has.
-    expect(run.error).to eq("Received 5 of 6 screenings")
+  end
+
+  it "can't vouch for the whole programme when a record has no id" do
+    stub_festival_page([ MockApi::Dataset.generation_one.first, nil ])
+
+    run = sync
+
+    expect(run).to be_completed_with_errors
+    expect(run.failures.pluck("external_id")).to eq([ nil ])
+    expect(run.error).to eq("Received 1 of 2 screenings")
+    expect(run.missing_upstream).to be_empty
   end
 
   it "counts a screening served twice in one run once" do
