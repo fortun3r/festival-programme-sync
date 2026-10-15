@@ -1,5 +1,28 @@
 # Festival Programme Sync — Take-Home
 
+## Solution notes
+
+**Run.** `docker compose up --build`, then `make test`. Ran another copy of this app before? `make reset` first; the compose volumes are shared.
+
+**Sync.** Hourly via sidekiq-cron (Cron tab in `/sidekiq`), or `make sync Q='generation=2'` with any mock API params. Each run writes a `sync_runs` row: status, created/updated/unchanged counts per screenings, films and venues, failed records with errors, and screenings missing upstream. Scheduled runs use generation 1, so pause the cron job while checking generation 2.
+
+**Decisions.**
+- Upsert on upstream ids; unchanged rows aren't written.
+- Each record saves on its own: a bad one is recorded and skipped (`completed_with_errors`); an API error stops the run (`failed`), keeps what was saved, and Sidekiq retries it 3 times.
+- A Postgres advisory lock prevents overlapping runs (the loser records `skipped`). It's tied to the DB session, so a dead worker can't strand it and no worker can release another's.
+- Screenings missing upstream are reported, not deleted: absence from one paged snapshot is weak evidence.
+- Filters reload only the results frame, with a debounced Stimulus submit. One region, so no Turbo Stream.
+
+**Existing code.** `VenueSync` matched venues on name, so an upstream rename fails the unique external-id check and aborts the batch, and a new venue reusing a name takes over the old row. I fixed the lookup, with regression specs. Nothing here calls it; I assume the nightly script does, so it should be deleted along with that script. Also fixed: the index N+1, ignored `q` and untargeted frame, plus setup issues (dev host check blocked the worker, non-executable `bin/`, seeds in the test DB, a stale gem volume). Left alone: `/sidekiq` has no auth; the mock API is routed in production.
+
+**Assumptions.** Times are UTC; each sync pulls the full programme.
+
+**With more time.** Hourly is too slow for festival week: webhooks or a frequent `updated_since` poll, keeping this as nightly reconciliation, plus an alert when nothing has succeeded for two hours.
+
+---
+
+## The brief
+
 **Role:** Senior Rails / Hotwire Developer · **Time box:** 4 hours
 **Stack:** Rails 8, Hotwire, PostgreSQL, Sidekiq, Tailwind (all in Docker)
 
